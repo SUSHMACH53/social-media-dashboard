@@ -9,22 +9,24 @@ import {
   CartesianGrid
 } from "recharts";
 
-const data = [
-  { name: "Mon", engagement: 30 },
-  { name: "Tue", engagement: 45 },
-  { name: "Wed", engagement: 60 },
-  { name: "Thu", engagement: 50 },
-  { name: "Fri", engagement: 70 },
-  { name: "Sat", engagement: 90 },
-  { name: "Sun", engagement: 75 }
-];
+// ✅ Accept data from parent (Dashboard)
+export default function EngagementChart({ data }) {
 
-export default function EngagementChart() {
+  // ✅ Convert backend array → chart format
+  const chartData = data?.map((value, index) => {
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    return {
+      name: days[index],
+      engagement: value
+    };
+  }) || [];
+
   return (
     <div style={{ marginTop: "40px" }}>
       <h3>Weekly Engagement</h3>
 
-      <LineChart width={500} height={300} data={data}>
+      <LineChart width={500} height={300} data={chartData}>
         <CartesianGrid stroke="#ccc" />
         <XAxis dataKey="name" />
         <YAxis />

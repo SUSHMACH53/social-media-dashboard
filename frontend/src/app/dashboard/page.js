@@ -36,7 +36,9 @@ export default function DashboardPage() {
 
       <div className="mt-8 bg-white p-4 rounded-lg shadow-sm">
         <h2 className="font-semibold mb-4">Weekly Engagement</h2>
-        <EngagementChart />
+
+
+        <EngagementChart data={stats.weeklyEngagement || []} />
       </div>
     </DashboardLayout>
   );
