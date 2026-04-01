@@ -11,7 +11,7 @@ const PORT = 5000;
 app.use(express.json());
 app.use(cors());
 
-// MongoDB Connection
+// MongoDB  Connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected ✅"))
   .catch((err) => console.error(err));
@@ -61,6 +61,23 @@ app.post("/api/posts", async (req, res) => {
     res.status(500).json({ error: "Failed to create post" });
   }
 });
+// UPDATE post
+app.put("/api/posts/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, content } = req.body;
+
+    const updatedPost = await Post.findByIdAndUpdate(
+      id,
+      { title, content },
+      { new: true }
+    );
+
+    res.json(updatedPost);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update post" });
+  }
+});
 
 // DELETE post
 app.delete("/api/posts/:id", async (req, res) => {
@@ -75,6 +92,20 @@ app.delete("/api/posts/:id", async (req, res) => {
   }
 });
 
+app.get("/api/create-test-post", async (req, res) => {
+  try {
+    const newPost = new Post({
+      title: "First Post",
+      content: "This is a test post from backend"
+    });
+
+    await newPost.save();
+
+    res.json({ message: "Test post created" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create post" });
+  }
+});
 // Test API
 app.get("/api/test", (req, res) => {
   res.json({ message: "API is working successfully" });

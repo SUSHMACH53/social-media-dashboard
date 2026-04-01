@@ -9,10 +9,10 @@ import {
   CartesianGrid
 } from "recharts";
 
-// ✅ Accept data from parent (Dashboard)
+// Accept data from parent (Dashboard)
 export default function EngagementChart({ data }) {
 
-  // ✅ Convert backend array → chart format
+  // Convert backend array → chart format
   const chartData = data?.map((value, index) => {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
