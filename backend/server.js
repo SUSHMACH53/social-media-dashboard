@@ -106,6 +106,25 @@ app.get("/api/create-test-post", async (req, res) => {
     res.status(500).json({ error: "Failed to create post" });
   }
 });
+// Analytics API
+app.get("/api/analytics", async (req, res) => {
+  try {
+    const totalPosts = await Post.countDocuments();
+
+    res.json({
+      followersGrowth: [400, 800, 1200, 1600, 2000],
+      postPerformance: [
+        { post: "Post 1", likes: 120 },
+        { post: "Post 2", likes: 90 },
+        { post: "Post 3", likes: 150 },
+        { post: "Post 4", likes: 80 }
+      ],
+      totalPosts
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch analytics data" });
+  }
+});
 // Test API
 app.get("/api/test", (req, res) => {
   res.json({ message: "API is working successfully" });
