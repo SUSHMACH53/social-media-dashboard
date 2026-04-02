@@ -11,24 +11,24 @@ const PORT = 5000;
 app.use(express.json());
 app.use(cors());
 
-// MongoDB  Connection
+// MongoDB Connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected ✅"))
   .catch((err) => console.error(err));
 
-// Test route
+// -------------------- TEST ROUTE --------------------
 app.get("/", (req, res) => {
   res.send("Backend server is running 🚀");
 });
 
-// Dashboard API
+// -------------------- DASHBOARD API --------------------
 app.get("/api/dashboard", async (req, res) => {
   try {
     const totalPosts = await Post.countDocuments();
 
     res.json({
       followers: 1204,
-      posts: totalPosts, 
+      posts: totalPosts,
       engagement: "3.4%",
       reach: "12.3k",
       weeklyEngagement: [30, 45, 60, 50, 70, 90, 75]
@@ -37,6 +37,8 @@ app.get("/api/dashboard", async (req, res) => {
     res.status(500).json({ error: "Failed to load dashboard data" });
   }
 });
+
+// -------------------- POSTS API --------------------
 
 // GET all posts
 app.get("/api/posts", async (req, res) => {
@@ -48,7 +50,7 @@ app.get("/api/posts", async (req, res) => {
   }
 });
 
-// POST new post
+// CREATE post
 app.post("/api/posts", async (req, res) => {
   try {
     const { title, content } = req.body;
@@ -61,6 +63,7 @@ app.post("/api/posts", async (req, res) => {
     res.status(500).json({ error: "Failed to create post" });
   }
 });
+
 // UPDATE post
 app.put("/api/posts/:id", async (req, res) => {
   try {
@@ -92,21 +95,7 @@ app.delete("/api/posts/:id", async (req, res) => {
   }
 });
 
-app.get("/api/create-test-post", async (req, res) => {
-  try {
-    const newPost = new Post({
-      title: "First Post",
-      content: "This is a test post from backend"
-    });
-
-    await newPost.save();
-
-    res.json({ message: "Test post created" });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create post" });
-  }
-});
-// Analytics API
+// -------------------- ANALYTICS API --------------------
 app.get("/api/analytics", async (req, res) => {
   try {
     const totalPosts = await Post.countDocuments();
@@ -125,12 +114,40 @@ app.get("/api/analytics", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch analytics data" });
   }
 });
-// Test API
+
+// -------------------- PROFILE API (FIXED) --------------------
+
+// Temporary in-memory profile (works instantly)
+let userProfile = {
+  name: "John Doe",
+  email: "john123@example.com",
+  bio: "Social media enthusiast 🚀"
+};
+
+// GET profile
+app.get("/api/profile", (req, res) => {
+  res.json(userProfile);
+});
+
+// UPDATE profile
+app.put("/api/profile", (req, res) => {
+  try {
+    const { name, email, bio } = req.body;
+
+    userProfile = { name, email, bio };
+
+    res.json(userProfile);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+// -------------------- TEST API --------------------
 app.get("/api/test", (req, res) => {
   res.json({ message: "API is working successfully" });
 });
 
-// Start server
+// -------------------- START SERVER --------------------
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
