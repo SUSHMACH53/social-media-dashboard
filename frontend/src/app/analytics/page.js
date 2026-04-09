@@ -31,39 +31,44 @@ export default function AnalyticsPage() {
     );
   }
 
-  // Convert followersGrowth → chart format
-  const growthData = data.followersGrowth.map((value, index) => ({
-    name: `Week ${index + 1}`,
-    followers: value
+  // Upload frequency (Mon–Sun)
+  const growthData = data.uploadFrequency.map((value, index) => ({
+    name: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
+    uploads: value,
   }));
+// STEP: Combine title + views
+const performanceData = data.postPerformance.map((item) => ({
+  name: item.post,
+  score: item.score,
+}));
 
   return (
     <DashboardLayout>
       <h1 className="text-xl font-semibold">Analytics</h1>
 
-      {/* Followers Growth Chart */}
+      {/* Upload Frequency Chart */}
       <div className="mt-6 bg-white p-4 rounded-lg shadow-sm">
-        <h2 className="mb-4 font-semibold">Followers Growth</h2>
+        <h2 className="mb-4 font-semibold">Upload Frequency</h2>
 
         <LineChart width={500} height={300} data={growthData}>
           <CartesianGrid stroke="#ccc" />
           <XAxis dataKey="name" />
           <YAxis />
           <Tooltip />
-          <Line type="monotone" dataKey="followers" stroke="#3b82f6" />
+          <Line type="monotone" dataKey="uploads" stroke="#3b82f6" />
         </LineChart>
       </div>
 
       {/* Post Performance Chart */}
       <div className="mt-6 bg-white p-4 rounded-lg shadow-sm">
-        <h2 className="mb-4 font-semibold">Post Performance</h2>
+        <h2 className="mb-4 font-semibold">Video Performance</h2>
 
-        <BarChart width={500} height={300} data={data.postPerformance}>
+        <BarChart width={500} height={300} data={performanceData}>
           <CartesianGrid stroke="#ccc" />
-          <XAxis dataKey="post" />
+          <XAxis dataKey="name" />
           <YAxis />
           <Tooltip />
-          <Bar dataKey="likes" fill="#10b981" />
+          <Bar dataKey="score" fill="#10b981" />
         </BarChart>
       </div>
     </DashboardLayout>
