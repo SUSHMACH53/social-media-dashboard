@@ -1,4 +1,4 @@
-const axios=require("axios");
+const axios = require("axios");
 require("dotenv").config();
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -6,11 +6,9 @@ const express = require("express");
 const Post = require("./models/Post");
 const youtubeRoutes = require("./routes/youtube");
 
-
 const app = express();
 const PORT = 5000;
 
-// console.log("API KEY:", process.env.YOUTUBE_API_KEY);
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -47,18 +45,17 @@ app.get("/api/dashboard", async (req, res) => {
     res.json({
       followers: stats.subscriberCount,
       posts: stats.videoCount,
-      engagement: "N/A", // will improve later
+      engagement: "N/A",
       reach: stats.viewCount,
-      weeklyEngagement: [30, 45, 60, 50, 70, 90, 75], // keep for now
+      weeklyEngagement: [30, 45, 60, 50, 70, 90, 75],
     });
   } catch (error) {
     console.error(error.response?.data || error.message);
     res.status(500).json({ error: "Failed to fetch dashboard data" });
   }
 });
-// -------------------- POSTS API --------------------
 
-// GET all posts
+// -------------------- POSTS API --------------------
 app.get("/api/posts", async (req, res) => {
   try {
     const posts = await Post.find();
@@ -68,7 +65,6 @@ app.get("/api/posts", async (req, res) => {
   }
 });
 
-// CREATE post
 app.post("/api/posts", async (req, res) => {
   try {
     const { title, content } = req.body;
@@ -82,7 +78,6 @@ app.post("/api/posts", async (req, res) => {
   }
 });
 
-// UPDATE post
 app.put("/api/posts/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -100,7 +95,6 @@ app.put("/api/posts/:id", async (req, res) => {
   }
 });
 
-// DELETE post
 app.delete("/api/posts/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -118,7 +112,7 @@ app.get("/api/analytics", async (req, res) => {
   try {
     const apiKey = process.env.YOUTUBE_API_KEY;
 
-    // Step 1: Get channel uploads playlist
+    // STEP 1: Get channel uploads playlist
     const channelRes = await axios.get(
       "https://www.googleapis.com/youtube/v3/channels",
       {
@@ -133,7 +127,7 @@ app.get("/api/analytics", async (req, res) => {
     const uploadsPlaylistId =
       channelRes.data.items[0].contentDetails.relatedPlaylists.uploads;
 
-    // Step 2: Fetch videos
+    // STEP 2: Fetch videos
     const videosRes = await axios.get(
       "https://www.googleapis.com/youtube/v3/playlistItems",
       {
@@ -148,9 +142,7 @@ app.get("/api/analytics", async (req, res) => {
 
     const videos = videosRes.data.items;
 
-    // Step 3: Process analytics
-
-    // A. Upload frequency by day
+    // STEP 3: Upload frequency
     const dayCount = {
       Mon: 0, Tue: 0, Wed: 0, Thu: 0,
       Fri: 0, Sat: 0, Sun: 0
@@ -162,35 +154,46 @@ app.get("/api/analytics", async (req, res) => {
       dayCount[day]++;
     });
 
-    // B. Recent video titles (mock performance)
-    // STEP 1: Get video IDs
-const videoIds = videos
-  .slice(0, 5)
-  .map((video) => video.snippet.resourceId.videoId)
-  .join(",");
+    // STEP 4: Get video IDs
+    const videoIds = videos
+      .slice(0, 5)
+      .map((video) => video.snippet.resourceId.videoId)
+      .join(",");
 
-// STEP 2: Fetch real video stats
-const statsRes = await axios.get(
-  "https://www.googleapis.com/youtube/v3/videos",
-  {
-    params: {
-      part: "statistics",
-      id: videoIds,
-      key: apiKey,
-    },
-  }
+    // STEP 5: Fetch video stats
+    const statsRes = await axios.get(
+      "https://www.googleapis.com/youtube/v3/videos",
+      {
+        params: {
+          part: "statistics",
+          id: videoIds,
+          key: apiKey,
+        },
+      }
+    );
+
+    // STEP 6: Build performance data
+    const postPerformance = videos.slice(0, 5).map((video, index) => ({
+      post: `Video ${index + 1}`,
+      title: video.snippet.title,
+      score: parseInt(statsRes.data.items[index].statistics.viewCount),
+    }));
+
+    // ✅ NEW: BEST VIDEO INSIGHT
+    const bestVideo = postPerformance.reduce((max, video) =>
+      video.score > max.score ? video : max
+    );
+
+    // ✅ NEW: WORST VIDEO INSIGHT
+    const worstVideo = postPerformance.reduce((min, video) =>
+  video.score < min.score ? video : min
 );
-
-// STEP 3: Combine title + views
-const postPerformance = videos.slice(0, 5).map((video, index) => ({
-  post: `Video ${index + 1}`,
-  title: video.snippet.title,
-  score: parseInt(statsRes.data.items[index].statistics.viewCount),
-}));
-
+    // FINAL RESPONSE
     res.json({
       uploadFrequency: Object.values(dayCount),
-      postPerformance
+      postPerformance,
+      bestVideo,
+      worstVideo,
     });
 
   } catch (error) {
@@ -199,27 +202,21 @@ const postPerformance = videos.slice(0, 5).map((video, index) => ({
   }
 });
 
-// -------------------- PROFILE API (FIXED) --------------------
-
-// Temporary in-memory profile (works instantly)
+// -------------------- PROFILE API --------------------
 let userProfile = {
   name: "John Doe",
   email: "john123@example.com",
   bio: "Social media enthusiast 🚀"
 };
 
-// GET profile
 app.get("/api/profile", (req, res) => {
   res.json(userProfile);
 });
 
-// UPDATE profile
 app.put("/api/profile", (req, res) => {
   try {
     const { name, email, bio } = req.body;
-
     userProfile = { name, email, bio };
-
     res.json(userProfile);
   } catch (error) {
     res.status(500).json({ error: "Failed to update profile" });

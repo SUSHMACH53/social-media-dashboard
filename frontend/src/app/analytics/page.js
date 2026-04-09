@@ -41,10 +41,23 @@ const performanceData = data.postPerformance.map((item) => ({
   name: item.post,
   score: item.score,
 }));
+// Find best performing video
+const bestVideo = data.bestVideo;
+const worstVideo = data.worstVideo;
 
   return (
     <DashboardLayout>
       <h1 className="text-xl font-semibold">Analytics</h1>
+      <div className="mt-6 bg-green-100 p-4 rounded-lg shadow-sm">
+      <h2 className="font-semibold text-green-800">Top Performing Video</h2>
+      <p className="mt-2 text-lg font-bold">{bestVideo.title}</p>
+      <p className="text-gray-700">Views: {bestVideo.score}</p>
+      </div>
+      <div className="mt-4 bg-red-100 p-4 rounded-lg shadow-sm">
+        <h2 className="font-semibold text-red-800">Needs Improvement</h2>
+        <p className="mt-2 text-lg font-bold">{worstVideo.title}</p>
+        <p className="text-gray-700">Views: {worstVideo.score}</p>
+      </div>
 
       {/* Upload Frequency Chart */}
       <div className="mt-6 bg-white p-4 rounded-lg shadow-sm">
