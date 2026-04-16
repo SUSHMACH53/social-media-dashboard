@@ -106,7 +106,6 @@ app.delete("/api/posts/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to delete post" });
   }
 });
-
 // -------------------- ANALYTICS API --------------------
 app.get("/api/analytics", async (req, res) => {
   try {
@@ -154,6 +153,8 @@ app.get("/api/analytics", async (req, res) => {
       dayCount[day]++;
     });
 
+    const uploadFrequency = Object.values(dayCount);
+
     // STEP 4: Get video IDs
     const videoIds = videos
       .slice(0, 5)
@@ -179,21 +180,81 @@ app.get("/api/analytics", async (req, res) => {
       score: parseInt(statsRes.data.items[index].statistics.viewCount),
     }));
 
-    // ✅ NEW: BEST VIDEO INSIGHT
+    // BEST VIDEO
     const bestVideo = postPerformance.reduce((max, video) =>
       video.score > max.score ? video : max
     );
 
-    // ✅ NEW: WORST VIDEO INSIGHT
+    // WORST VIDEO
     const worstVideo = postPerformance.reduce((min, video) =>
-  video.score < min.score ? video : min
-);
+      video.score < min.score ? video : min
+    );
+
+    // -------------------- AI INSIGHTS --------------------
+
+    // Upload Insight
+    const maxUploads = Math.max(...uploadFrequency);
+    const bestDayIndex = uploadFrequency.indexOf(maxUploads);
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const bestDay = days[bestDayIndex];
+
+    const uploadInsight = `You are most active on ${bestDay}`;
+
+    // Performance Insight
+    let performanceRatio = 0;
+    let performanceInsight = "Not enough data for comparison";
+
+    if (bestVideo && worstVideo && worstVideo.score > 0) {
+      performanceRatio = (bestVideo.score / worstVideo.score).toFixed(1);
+      performanceInsight = `Your best video performs ${performanceRatio}x better than your lowest performing video`;
+    }
+
+    // Consistency Insight
+    const isConsistent = uploadFrequency.every((val) => val >= 3);
+
+    const consistencyInsight = isConsistent
+      ? "You have a consistent upload pattern"
+      : "Your upload pattern is inconsistent across the week";
+
+    // -------------------- SMART RECOMMENDATIONS --------------------
+
+    const bestDayRecommendation = `You should post more on ${bestDay} to maximize engagement`;
+
+    const weekendUploads = uploadFrequency[5] + uploadFrequency[6];
+
+    const weekendRecommendation =
+      weekendUploads < 2
+        ? "Weekend activity is low — consider avoiding or experimenting with weekend posts"
+        : "You are utilizing weekends well";
+
+    const strategyRecommendation =
+      performanceRatio > 5
+        ? "Your top content significantly outperforms others — consider creating similar content"
+        : "Your content performance is balanced — maintain consistency";
+
+    const consistencyRecommendation = isConsistent
+      ? "Keep maintaining your consistent posting schedule"
+      : "Try to maintain a more consistent posting schedule throughout the week";
+
     // FINAL RESPONSE
     res.json({
-      uploadFrequency: Object.values(dayCount),
+      uploadFrequency,
       postPerformance,
       bestVideo,
       worstVideo,
+
+      insights: {
+        uploadInsight,
+        performanceInsight,
+        consistencyInsight,
+      },
+
+      recommendations: {
+        bestDayRecommendation,
+        weekendRecommendation,
+        strategyRecommendation,
+        consistencyRecommendation,
+      },
     });
 
   } catch (error) {
@@ -201,7 +262,6 @@ app.get("/api/analytics", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch analytics" });
   }
 });
-
 // -------------------- PROFILE API --------------------
 let userProfile = {
   name: "John Doe",

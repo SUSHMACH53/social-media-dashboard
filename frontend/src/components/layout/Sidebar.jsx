@@ -14,7 +14,7 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="w-60 bg-white h-screen p-5 shadow-sm">
+    <aside className="w-64 bg-white min-h-full p-5 shadow-sm">
       <ul className="space-y-3">
         {menuItems.map((item) => {
           const isActive = pathname === item.path;
