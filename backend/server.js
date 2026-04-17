@@ -184,6 +184,32 @@ app.get("/api/analytics", async (req, res) => {
     const bestVideo = postPerformance.reduce((max, video) =>
       video.score > max.score ? video : max
     );
+    // -------------------- TREND DETECTION --------------------
+
+const topTitles = postPerformance.map((video) =>
+  video.title.toLowerCase()
+);
+
+let aiCount = 0;
+let devCount = 0;
+let eduCount = 0;
+
+topTitles.forEach((title) => {
+  if (title.includes("ai") || title.includes("gemini")) aiCount++;
+  if (title.includes("dev") || title.includes("code") || title.includes("implement")) devCount++;
+  if (title.includes("build") || title.includes("tutorial")) eduCount++;
+});
+
+// Determine dominant trend
+let trendCategory = "General Content";
+
+if (aiCount >= devCount && aiCount >= eduCount) {
+  trendCategory = "AI-focused content performs best";
+} else if (devCount >= aiCount && devCount >= eduCount) {
+  trendCategory = "Developer-focused content performs best";
+} else if (eduCount >= aiCount && eduCount >= devCount) {
+  trendCategory = "Educational/tutorial content performs best";
+}
 
     // WORST VIDEO
     const worstVideo = postPerformance.reduce((min, video) =>
@@ -235,7 +261,52 @@ app.get("/api/analytics", async (req, res) => {
     const consistencyRecommendation = isConsistent
       ? "Keep maintaining your consistent posting schedule"
       : "Try to maintain a more consistent posting schedule throughout the week";
+    // -------------------- AUTOMATION (PHASE 3 STEP 1) --------------------
 
+// 1. Next Best Day (already calculated earlier)
+const nextBestDay = bestDay;
+
+// 2. Content Suggestion (based on best performing video)
+const contentSuggestion = `${trendCategory}. Consider creating similar themed videos`;
+
+// 3. Posting Advice
+const weekendUploadsAuto = uploadFrequency[5] + uploadFrequency[6];
+
+const postingAdvice =
+  weekendUploadsAuto < 2
+    ? "Avoid weekends and focus on mid-week uploads for better performance"
+    : "You are utilizing weekends well — maintain your current posting pattern";
+// -------------------- ALERT SYSTEM (PHASE 3 STEP 3) --------------------
+
+const alerts = [];
+
+// 1. Consistency Alert
+if (!isConsistent) {
+  alerts.push("⚠ Your upload consistency is low — try posting more regularly");
+}
+
+// 2. High Performance Gap Alert
+if (bestVideo && worstVideo && worstVideo.score > 0) {
+  const ratio = bestVideo.score / worstVideo.score;
+
+  if (ratio > 5) {
+    alerts.push("🔥 Your top video is performing significantly better than others");
+  }
+}
+
+// 3. Low Performing Content Alert
+const lowPerformingVideos = postPerformance.filter(
+  (video) => video.score < 1500
+);
+
+if (lowPerformingVideos.length > 0) {
+  alerts.push("📉 Some of your recent videos are underperforming");
+}
+
+// 4. Strong Performance Alert (optional positive signal)
+if (bestVideo.score > 8000) {
+  alerts.push("🚀 You have a high-performing video — capitalize on this trend");
+}
     // FINAL RESPONSE
     res.json({
       uploadFrequency,
@@ -255,6 +326,13 @@ app.get("/api/analytics", async (req, res) => {
         strategyRecommendation,
         consistencyRecommendation,
       },
+        automation: {
+        nextBestDay,
+        contentSuggestion,
+        postingAdvice,
+        trendCategory
+      },
+      alerts
     });
 
   } catch (error) {

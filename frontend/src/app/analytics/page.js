@@ -1,30 +1,63 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import DashboardLayout from "../../components/layout/DashboardLayout";
 import {
-  LineChart,Line,XAxis,YAxis,Tooltip,CartesianGrid,BarChart,Bar
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  BarChart,
+  Bar
 } from "recharts";
+import toast from "react-hot-toast";
 
 export default function AnalyticsPage() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState({});
+  const [loading, setLoading] = useState(true);
+  const previousAlerts = useRef([]);
 
-useEffect(() => {
-  const fetchData = () => {
-    fetch("http://localhost:5000/api/analytics")
-      .then((res) => res.json())
-      .then((data) => setData(data))
-      .catch((err) => console.error(err));
-  };
+  useEffect(() => {
+    const fetchData = () => {
+      console.log("Fetching latest analytics...");
 
-  fetchData(); // first load
+      fetch("http://localhost:5000/api/analytics")
+        .then((res) => res.json()) // ✅ FIXED
+        .then((data) => {
+          console.log("Updated data:", data);
 
-  const interval = setInterval(fetchData, 10000); // every 10 sec
+          setData(data);
+          setLoading(false); // ✅ IMPORTANT FIX
 
-  return () => clearInterval(interval);
-}, []);
+          // Detect new alerts
+          const newAlerts = data.alerts || [];
 
-  if (!data) {
+          if (previousAlerts.current.length > 0) {
+            newAlerts.forEach((alert) => {
+              if (!previousAlerts.current.includes(alert)) {
+                toast(alert);
+              }
+            });
+          }
+
+          previousAlerts.current = newAlerts;
+        })
+        .catch((err) => console.error(err));
+    };
+
+    // Initial fetch
+    fetchData();
+
+    // Auto refresh
+    const interval = setInterval(fetchData, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Loading state
+  if (loading) {
     return (
       <DashboardLayout>
         <p>Loading analytics...</p>
@@ -32,20 +65,22 @@ useEffect(() => {
     );
   }
 
-  // Upload frequency (Mon–Sun)
+  // Upload frequency
   const growthData = data.uploadFrequency.map((value, index) => ({
     name: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
     uploads: value,
   }));
-// STEP: Combine title + views
-const performanceData = data.postPerformance.map((item) => ({
-  name: item.post,
-  score: item.score,
-}));
-// Find best performing video
-const bestVideo = data.bestVideo;
-const worstVideo = data.worstVideo;
 
+  // Performance data
+  const performanceData = data.postPerformance.map((item) => ({
+    name: item.post,
+    score: item.score,
+  }));
+
+  // Best & worst videos
+  const bestVideo = data.bestVideo;
+  const worstVideo = data.worstVideo;
+  
 return (
   <DashboardLayout>
     <h1 className="text-xl font-semibold">Analytics</h1>
@@ -81,7 +116,7 @@ return (
       </div>
     </div>
 
-    {/* ✅ Recommendations Grid */}
+    {/*  Recommendations Grid */}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
 
       <div className="bg-blue-50 p-4 rounded-lg shadow-sm">
@@ -105,8 +140,61 @@ return (
       </div>
 
     </div>
+    {/* Automation (Phase 3) */}
 
-    {/* ✅ Charts Side by Side */}
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+
+      <div className="bg-indigo-50 p-4 rounded-lg shadow-sm">
+        <h3 className="font-semibold text-indigo-700">Next Best Day</h3>
+        <p>{data.automation.nextBestDay}</p>
+      </div>
+
+      <div className="bg-pink-50 p-4 rounded-lg shadow-sm">
+        <h3 className="font-semibold text-pink-700">Content Suggestion</h3>
+        <p>{data.automation.contentSuggestion}</p>
+      </div>
+
+      <div className="bg-orange-50 p-4 rounded-lg shadow-sm">
+        <h3 className="font-semibold text-orange-700">Posting Advice</h3>
+        <p>{data.automation.postingAdvice}</p>
+      </div>
+
+    </div>
+    {/* Alerts Section */}
+<div className="mt-6">
+  <h2 className="text-lg font-semibold mb-3">Alerts</h2>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+
+    {data.alerts.map((alert, index) => {
+      let bg = "bg-gray-100";
+      let text = "text-gray-800";
+
+      if (alert.includes("⚠")) {
+        bg = "bg-yellow-100";
+        text = "text-yellow-800";
+      } else if (alert.includes("🔥")) {
+        bg = "bg-red-100";
+        text = "text-red-800";
+      } else if (alert.includes("📉")) {
+        bg = "bg-orange-100";
+        text = "text-orange-800";
+      } else if (alert.includes("🚀")) {
+        bg = "bg-green-100";
+        text = "text-green-800";
+      }
+
+      return (
+        <div key={index} className={`${bg} ${text} p-4 rounded-lg shadow-sm`}>
+          <p>{alert}</p>
+        </div>
+      );
+    })}
+
+  </div>
+</div>
+
+    {/*  Charts Side by Side */}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
 
       {/* Upload Frequency */}
