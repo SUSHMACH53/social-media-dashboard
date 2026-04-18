@@ -160,6 +160,49 @@ return (
       </div>
 
     </div>
+    {/* Prediction Card */}
+<div className="mt-6 bg-indigo-100 p-4 rounded-lg shadow-sm">
+  <h2 className="font-semibold text-indigo-800">Performance Prediction</h2>
+
+  <p className="mt-2">
+    Expected Views: <span className="font-bold">{data.prediction.predictedViews}</span>
+  </p>
+
+  <p>
+    Average Views: {data.prediction.averageViews}
+  </p>
+
+  <p className="mt-1 text-sm text-gray-700">
+    Expected Performance: <b>{data.prediction.performanceLevel}</b>
+  </p>
+</div>
+
+{/* Confidence Score */}
+<div className="mt-4 bg-teal-100 p-4 rounded-lg shadow-sm">
+  <h2 className="font-semibold text-teal-800">Prediction Confidence</h2>
+
+  <p className="mt-2">
+    Confidence Level: <b>{data.confidence.level}</b>
+  </p>
+
+  <p className="text-sm text-gray-700">
+    Based on performance consistency (deviation: {data.confidence.deviation})
+  </p>
+</div>
+
+{/* Trend Insight */}
+<div className="mt-6 bg-pink-100 p-4 rounded-lg shadow-sm">
+  <h2 className="font-semibold text-pink-800">Trending Content Type</h2>
+
+  <p className="mt-2 text-lg font-bold">
+    {data.trend.category}
+  </p>
+
+  <p className="text-sm text-gray-700">
+    This category is currently performing best on your channel
+  </p>
+</div>
+
     {/* Alerts Section */}
 <div className="mt-6">
   <h2 className="text-lg font-semibold mb-3">Alerts</h2>

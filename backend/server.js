@@ -184,6 +184,76 @@ app.get("/api/analytics", async (req, res) => {
     const bestVideo = postPerformance.reduce((max, video) =>
       video.score > max.score ? video : max
     );
+    // -------------------- PREDICTIVE ANALYTICS --------------------
+
+// Average performance
+const totalViews = postPerformance.reduce((sum, v) => sum + v.score, 0);
+const avgViews = Math.round(totalViews / postPerformance.length);
+
+// Simple prediction model
+const predictedNextViews = Math.round(
+  (bestVideo.score * 0.6) + (avgViews * 0.4)
+);
+
+// Performance category
+let performanceLevel = "Average";
+
+if (predictedNextViews > avgViews * 1.5) {
+  performanceLevel = "High";
+} else if (predictedNextViews < avgViews * 0.7) {
+  performanceLevel = "Low";
+}
+
+// -------------------- CONFIDENCE SCORE --------------------
+
+const variance =
+  postPerformance.reduce((sum, v) => {
+    return sum + Math.pow(v.score - avgViews, 2);
+  }, 0) / postPerformance.length;
+
+const stdDeviation = Math.sqrt(variance);
+
+// Confidence logic
+let confidence = "Medium";
+
+if (stdDeviation < avgViews * 0.3) {
+  confidence = "High";
+} else if (stdDeviation > avgViews * 0.7) {
+  confidence = "Low";
+}
+
+// -------------------- TREND DETECTION --------------------
+
+const keywordMap = {
+  AI: ["AI", "Gemini", "ML", "model"],
+  Dev: ["code", "dev", "syntax", "build"],
+  Tutorial: ["how", "implement", "guide"],
+};
+
+let categoryScores = {
+  AI: 0,
+  Dev: 0,
+  Tutorial: 0,
+};
+
+// Analyze titles
+postPerformance.forEach((video) => {
+  const title = video.title.toLowerCase();
+
+  Object.keys(keywordMap).forEach((category) => {
+    keywordMap[category].forEach((keyword) => {
+      if (title.includes(keyword.toLowerCase())) {
+        categoryScores[category] += video.score;
+      }
+    });
+  });
+});
+
+// Find dominant trend
+const trendCategories = Object.keys(categoryScores).reduce((a, b) =>
+  categoryScores[a] > categoryScores[b] ? a : b
+);
+
     // -------------------- TREND DETECTION --------------------
 
 const topTitles = postPerformance.map((video) =>
@@ -332,7 +402,20 @@ if (bestVideo.score > 8000) {
         postingAdvice,
         trendCategory
       },
-      alerts
+      alerts,
+      prediction: {
+      predictedViews: predictedNextViews,
+      averageViews: avgViews,
+      performanceLevel
+    },
+    trend: {
+    category: trendCategories,
+    scores: categoryScores
+    },
+    confidence: {
+    level: confidence,
+    deviation: Math.round(stdDeviation)
+    },
     });
 
   } catch (error) {
