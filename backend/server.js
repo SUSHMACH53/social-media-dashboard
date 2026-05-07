@@ -1,53 +1,259 @@
+try {
+  require("dotenv").config();
+} catch {
+  console.warn("dotenv is not installed; using existing environment variables.");
+}
+
 const axios = require("axios");
-require("dotenv").config();
-const mongoose = require("mongoose");
 const cors = require("cors");
 const express = require("express");
+const mongoose = require("mongoose");
 const Post = require("./models/Post");
+const User = require("./models/user");
 const youtubeRoutes = require("./routes/youtube");
+const authRoutes = require("./routes/auth");
+const { posts: memoryPosts, users: memoryUsers, createId } = require("./utils/memoryStore");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
+const DEFAULT_CHANNEL = process.env.YOUTUBE_CHANNEL || "GoogleDevelopers";
 
-// Middleware
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 app.use("/api/youtube", youtubeRoutes);
+app.use("/api/auth", authRoutes);
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected ✅"))
-  .catch((err) => console.error(err));
+const fallbackVideos = [
+  { post: "Post 1", title: "AI workflow tips for creators", score: 9600 },
+  { post: "Post 2", title: "Build a better posting calendar", score: 7200 },
+  { post: "Post 3", title: "Developer update highlights", score: 5400 },
+  { post: "Post 4", title: "Content planning tutorial", score: 4300 },
+  { post: "Post 5", title: "Analytics explained simply", score: 3800 },
+];
 
-// -------------------- TEST ROUTE --------------------
+const fallbackUploadFrequency = [3, 5, 4, 6, 8, 2, 1];
+
+const formatNumber = (value) =>
+  Number(value || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+
+const isDatabaseReady = () => mongoose.connection.readyState === 1;
+
+const getYouTubeClient = () => {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+
+  if (!apiKey) {
+    return null;
+  }
+
+  return axios.create({
+    baseURL: "https://www.googleapis.com/youtube/v3",
+    params: { key: apiKey },
+  });
+};
+
+const getChannelData = async (part = "snippet,statistics,contentDetails") => {
+  const client = getYouTubeClient();
+
+  if (!client) {
+    return null;
+  }
+
+  const response = await client.get("/channels", {
+    params: { part, forUsername: DEFAULT_CHANNEL },
+  });
+
+  return response.data.items?.[0] || null;
+};
+
+const buildAnalytics = (uploadFrequency, postPerformance) => {
+  const safePerformance = postPerformance.length ? postPerformance : fallbackVideos;
+  const totalViews = safePerformance.reduce((sum, video) => sum + video.score, 0);
+  const averageViews = Math.round(totalViews / safePerformance.length);
+  const bestVideo = safePerformance.reduce((max, video) =>
+    video.score > max.score ? video : max
+  );
+  const worstVideo = safePerformance.reduce((min, video) =>
+    video.score < min.score ? video : min
+  );
+
+  const maxUploads = Math.max(...uploadFrequency);
+  const bestDayIndex = uploadFrequency.indexOf(maxUploads);
+  const shortDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const fullDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const bestDay = fullDays[bestDayIndex] || "Friday";
+  const weekendUploads = uploadFrequency[5] + uploadFrequency[6];
+  const isConsistent = uploadFrequency.filter((value) => value > 0).length >= 5;
+  const performanceRatio = worstVideo.score > 0 ? bestVideo.score / worstVideo.score : 1;
+  const predictedViews = Math.round(bestVideo.score * 0.55 + averageViews * 0.45);
+  const variance =
+    safePerformance.reduce((sum, video) => sum + Math.pow(video.score - averageViews, 2), 0) /
+    safePerformance.length;
+  const deviation = Math.round(Math.sqrt(variance));
+
+  const categoryScores = {
+    AI: 0,
+    Developer: 0,
+    Tutorial: 0,
+    Strategy: 0,
+  };
+
+  const keywordMap = {
+    AI: ["ai", "gemini", "model", "automation"],
+    Developer: ["dev", "developer", "code", "build"],
+    Tutorial: ["tutorial", "guide", "how"],
+    Strategy: ["strategy", "calendar", "analytics", "planning"],
+  };
+
+  safePerformance.forEach((video) => {
+    const title = video.title.toLowerCase();
+    Object.entries(keywordMap).forEach(([category, keywords]) => {
+      if (keywords.some((keyword) => title.includes(keyword))) {
+        categoryScores[category] += video.score;
+      }
+    });
+  });
+
+  const trendCategory = Object.keys(categoryScores).reduce((best, current) =>
+    categoryScores[current] > categoryScores[best] ? current : best
+  );
+
+  const alerts = [];
+
+  if (!isConsistent) {
+    alerts.push("Upload consistency is low. Try posting on more days each week.");
+  }
+
+  if (performanceRatio > 2) {
+    alerts.push("Your top post is outperforming the rest. Reuse that theme soon.");
+  }
+
+  if (safePerformance.some((video) => video.score < averageViews * 0.75)) {
+    alerts.push("Some recent posts are below your average engagement.");
+  }
+
+  if (bestVideo.score > averageViews * 1.25) {
+    alerts.push("A high-performing post is ready to turn into a follow-up.");
+  }
+
+  return {
+    uploadFrequency,
+    uploadFrequencyLabels: shortDays,
+    postPerformance: safePerformance,
+    bestVideo,
+    worstVideo,
+    insights: {
+      uploadInsight: `You are most active on ${bestDay}.`,
+      performanceInsight: `Your strongest post gets ${performanceRatio.toFixed(1)}x the views of your lowest post.`,
+      consistencyInsight: isConsistent
+        ? "Your posting rhythm is healthy across the week."
+        : "Your upload pattern has gaps that could reduce reach.",
+    },
+    recommendations: {
+      bestDayRecommendation: `Schedule priority posts on ${bestDay}.`,
+      weekendRecommendation:
+        weekendUploads < 2
+          ? "Weekend activity is low. Test one weekend post before scaling it."
+          : "Weekend publishing is contributing useful reach.",
+      strategyRecommendation:
+        performanceRatio > 2
+          ? `Create another post around "${bestVideo.title}" while interest is warm.`
+          : "Your performance is balanced. Keep testing small topic variations.",
+      consistencyRecommendation: isConsistent
+        ? "Protect your current cadence with scheduled posts."
+        : "Plan at least five posting days per week for steadier growth.",
+    },
+    automation: {
+      nextBestDay: bestDay,
+      contentSuggestion: `${trendCategory} content is the strongest current signal.`,
+      postingAdvice:
+        weekendUploads < 2
+          ? "Prioritize weekdays, then test weekends with lighter content."
+          : "Keep weekends in the calendar and reserve weekdays for major posts.",
+      trendCategory,
+    },
+    alerts,
+    prediction: {
+      predictedViews,
+      averageViews,
+      performanceLevel:
+        predictedViews > averageViews * 1.25
+          ? "High"
+          : predictedViews < averageViews * 0.8
+            ? "Low"
+            : "Average",
+    },
+    trend: {
+      category: trendCategory,
+      scores: categoryScores,
+    },
+    confidence: {
+      level:
+        deviation < averageViews * 0.3
+          ? "High"
+          : deviation > averageViews * 0.7
+            ? "Low"
+            : "Medium",
+      deviation,
+    },
+  };
+};
+
+mongoose
+  .connect(process.env.MONGO_URI || "mongodb://127.0.0.1:27017/social-dashboard")
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection failed:", err.message));
+
 app.get("/", (req, res) => {
-  res.send("Backend server is running 🚀");
+  res.json({ message: "Social Media Dashboard API is running" });
 });
 
-// -------------------- DASHBOARD API --------------------
 app.get("/api/dashboard", async (req, res) => {
   try {
-    const apiKey = process.env.YOUTUBE_API_KEY;
+    const channel = await getChannelData("statistics");
+    const postCount = isDatabaseReady() ? await Post.countDocuments() : memoryPosts.length;
 
-    const response = await axios.get(
-      "https://www.googleapis.com/youtube/v3/channels",
-      {
-        params: {
-          part: "statistics",
-          forUsername: "GoogleDevelopers",
-          key: apiKey,
+    if (!channel) {
+      return res.json({
+        followers: "24,800",
+        posts: postCount || 128,
+        engagement: "8.4%",
+        reach: "412,900",
+        weeklyEngagement: [38, 52, 64, 59, 83, 71, 76],
+        recommendations: {
+          bestCategory: "Strategy",
+          suggestedTopics: [
+            "Weekly content planning",
+            "AI-assisted post ideas",
+            "Behind-the-scenes creation",
+            "Analytics breakdowns",
+          ],
+          bestPostingDay: "Friday",
+          bestTime: "6 PM - 9 PM",
+          suggestedFormat: "Short videos with carousel recaps",
         },
-      }
-    );
+      });
+    }
 
-    const stats = response.data.items[0].statistics;
+    const stats = channel.statistics;
 
     res.json({
-      followers: stats.subscriberCount,
-      posts: stats.videoCount,
-      engagement: "N/A",
-      reach: stats.viewCount,
-      weeklyEngagement: [30, 45, 60, 50, 70, 90, 75],
+      followers: formatNumber(stats.subscriberCount),
+      posts: formatNumber(stats.videoCount),
+      engagement: "Live",
+      reach: formatNumber(stats.viewCount),
+      weeklyEngagement: [38, 52, 64, 59, 83, 71, 76],
+      recommendations: {
+        bestCategory: "Developer Education",
+        suggestedTopics: [
+          "API demos",
+          "Productivity workflows",
+          "New feature explainers",
+          "Short tutorials",
+        ],
+        bestPostingDay: "Friday",
+        bestTime: "6 PM - 9 PM",
+        suggestedFormat: "Short-form videos with a clear hook",
+      },
     });
   } catch (error) {
     console.error(error.response?.data || error.message);
@@ -55,10 +261,13 @@ app.get("/api/dashboard", async (req, res) => {
   }
 });
 
-// -------------------- POSTS API --------------------
 app.get("/api/posts", async (req, res) => {
   try {
-    const posts = await Post.find();
+    if (!isDatabaseReady()) {
+      return res.json([...memoryPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    }
+
+    const posts = await Post.find().sort({ createdAt: -1 });
     res.json(posts);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch posts" });
@@ -67,10 +276,40 @@ app.get("/api/posts", async (req, res) => {
 
 app.post("/api/posts", async (req, res) => {
   try {
-    const { title, content } = req.body;
+    const { title, content, platform, mediaUrl, scheduledAt } = req.body;
 
-    const newPost = new Post({ title, content });
-    const savedPost = await newPost.save();
+    if (!title || !content) {
+      return res.status(400).json({ error: "Title and content are required" });
+    }
+
+    if (!isDatabaseReady()) {
+      const now = new Date().toISOString();
+      const savedPost = {
+        _id: createId(),
+        title,
+        content,
+        platform: platform || "Instagram",
+        mediaUrl: mediaUrl || "",
+        scheduledAt: scheduledAt || null,
+        status: req.body.status || "Draft",
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        createdAt: now,
+        updatedAt: now,
+      };
+      memoryPosts.unshift(savedPost);
+      return res.status(201).json(savedPost);
+    }
+
+    const savedPost = await Post.create({
+      title,
+      content,
+      platform,
+      mediaUrl,
+      scheduledAt,
+      status: req.body.status,
+    });
 
     res.status(201).json(savedPost);
   } catch (error) {
@@ -80,14 +319,30 @@ app.post("/api/posts", async (req, res) => {
 
 app.put("/api/posts/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-    const { title, content } = req.body;
+    if (!isDatabaseReady()) {
+      const index = memoryPosts.findIndex((post) => post._id === req.params.id);
 
-    const updatedPost = await Post.findByIdAndUpdate(
-      id,
-      { title, content },
-      { new: true }
-    );
+      if (index === -1) {
+        return res.status(404).json({ error: "Post not found" });
+      }
+
+      memoryPosts[index] = {
+        ...memoryPosts[index],
+        ...req.body,
+        updatedAt: new Date().toISOString(),
+      };
+
+      return res.json(memoryPosts[index]);
+    }
+
+    const updatedPost = await Post.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!updatedPost) {
+      return res.status(404).json({ error: "Post not found" });
+    }
 
     res.json(updatedPost);
   } catch (error) {
@@ -95,361 +350,189 @@ app.put("/api/posts/:id", async (req, res) => {
   }
 });
 
+app.patch("/api/posts/:id/engage", async (req, res) => {
+  try {
+    const { type } = req.body;
+    const allowed = ["likes", "comments", "shares"];
+
+    if (!allowed.includes(type)) {
+      return res.status(400).json({ error: "Invalid engagement type" });
+    }
+
+    if (!isDatabaseReady()) {
+      const post = memoryPosts.find((item) => item._id === req.params.id);
+
+      if (!post) {
+        return res.status(404).json({ error: "Post not found" });
+      }
+
+      post[type] = (post[type] || 0) + 1;
+      post.updatedAt = new Date().toISOString();
+      return res.json(post);
+    }
+
+    const updatedPost = await Post.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { [type]: 1 } },
+      { new: true }
+    );
+
+    if (!updatedPost) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    res.json(updatedPost);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update engagement" });
+  }
+});
+
 app.delete("/api/posts/:id", async (req, res) => {
   try {
-    const { id } = req.params;
+    if (!isDatabaseReady()) {
+      const index = memoryPosts.findIndex((post) => post._id === req.params.id);
 
-    await Post.findByIdAndDelete(id);
+      if (index === -1) {
+        return res.status(404).json({ error: "Post not found" });
+      }
+
+      memoryPosts.splice(index, 1);
+      return res.json({ message: "Post deleted successfully" });
+    }
+
+    const deletedPost = await Post.findByIdAndDelete(req.params.id);
+
+    if (!deletedPost) {
+      return res.status(404).json({ error: "Post not found" });
+    }
 
     res.json({ message: "Post deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: "Failed to delete post" });
   }
 });
-// -------------------- ANALYTICS API --------------------
+
 app.get("/api/analytics", async (req, res) => {
   try {
-    const apiKey = process.env.YOUTUBE_API_KEY;
+    const channel = await getChannelData("contentDetails");
 
-    // STEP 1: Get channel uploads playlist
-    const channelRes = await axios.get(
-      "https://www.googleapis.com/youtube/v3/channels",
-      {
-        params: {
-          part: "contentDetails",
-          forUsername: "GoogleDevelopers",
-          key: apiKey,
-        },
-      }
-    );
+    if (!channel) {
+      return res.json(buildAnalytics(fallbackUploadFrequency, fallbackVideos));
+    }
 
-    const uploadsPlaylistId =
-      channelRes.data.items[0].contentDetails.relatedPlaylists.uploads;
-
-    // STEP 2: Fetch videos
-    const videosRes = await axios.get(
-      "https://www.googleapis.com/youtube/v3/playlistItems",
-      {
-        params: {
-          part: "snippet",
-          playlistId: uploadsPlaylistId,
-          maxResults: 20,
-          key: apiKey,
-        },
-      }
-    );
-
-    const videos = videosRes.data.items;
-
-    // STEP 3: Upload frequency
-    const dayCount = {
-      Mon: 0, Tue: 0, Wed: 0, Thu: 0,
-      Fri: 0, Sat: 0, Sun: 0
-    };
-
-    videos.forEach((video) => {
-      const date = new Date(video.snippet.publishedAt);
-      const day = date.toLocaleDateString("en-US", { weekday: "short" });
-      dayCount[day]++;
+    const client = getYouTubeClient();
+    const uploadsPlaylistId = channel.contentDetails.relatedPlaylists.uploads;
+    const videosRes = await client.get("/playlistItems", {
+      params: {
+        part: "snippet",
+        playlistId: uploadsPlaylistId,
+        maxResults: 20,
+      },
     });
 
-    const uploadFrequency = Object.values(dayCount);
+    const videos = videosRes.data.items || [];
+    const uploadFrequency = [...fallbackUploadFrequency].map(() => 0);
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-    // STEP 4: Get video IDs
+    videos.forEach((video) => {
+      const day = new Date(video.snippet.publishedAt).toLocaleDateString("en-US", {
+        weekday: "short",
+      });
+      const index = days.indexOf(day);
+      if (index >= 0) uploadFrequency[index] += 1;
+    });
+
     const videoIds = videos
       .slice(0, 5)
       .map((video) => video.snippet.resourceId.videoId)
       .join(",");
 
-    // STEP 5: Fetch video stats
-    const statsRes = await axios.get(
-      "https://www.googleapis.com/youtube/v3/videos",
-      {
-        params: {
-          part: "statistics",
-          id: videoIds,
-          key: apiKey,
-        },
-      }
-    );
+    if (!videoIds) {
+      return res.json(buildAnalytics(fallbackUploadFrequency, fallbackVideos));
+    }
 
-    // STEP 6: Build performance data
+    const statsRes = await client.get("/videos", {
+      params: { part: "statistics", id: videoIds },
+    });
+
     const postPerformance = videos.slice(0, 5).map((video, index) => ({
       post: `Video ${index + 1}`,
       title: video.snippet.title,
-      score: parseInt(statsRes.data.items[index].statistics.viewCount),
+      score: Number(statsRes.data.items?.[index]?.statistics?.viewCount || 0),
     }));
 
-    // BEST VIDEO
-    const bestVideo = postPerformance.reduce((max, video) =>
-      video.score > max.score ? video : max
-    );
-    // -------------------- PREDICTIVE ANALYTICS --------------------
-
-// Average performance
-const totalViews = postPerformance.reduce((sum, v) => sum + v.score, 0);
-const avgViews = Math.round(totalViews / postPerformance.length);
-
-// Simple prediction model
-const predictedNextViews = Math.round(
-  (bestVideo.score * 0.6) + (avgViews * 0.4)
-);
-
-// Performance category
-let performanceLevel = "Average";
-
-if (predictedNextViews > avgViews * 1.5) {
-  performanceLevel = "High";
-} else if (predictedNextViews < avgViews * 0.7) {
-  performanceLevel = "Low";
-}
-
-// -------------------- CONFIDENCE SCORE --------------------
-
-const variance =
-  postPerformance.reduce((sum, v) => {
-    return sum + Math.pow(v.score - avgViews, 2);
-  }, 0) / postPerformance.length;
-
-const stdDeviation = Math.sqrt(variance);
-
-// Confidence logic
-let confidence = "Medium";
-
-if (stdDeviation < avgViews * 0.3) {
-  confidence = "High";
-} else if (stdDeviation > avgViews * 0.7) {
-  confidence = "Low";
-}
-
-// -------------------- TREND DETECTION --------------------
-
-const keywordMap = {
-  AI: ["AI", "Gemini", "ML", "model"],
-  Dev: ["code", "dev", "syntax", "build"],
-  Tutorial: ["how", "implement", "guide"],
-};
-
-let categoryScores = {
-  AI: 0,
-  Dev: 0,
-  Tutorial: 0,
-};
-
-// Analyze titles
-postPerformance.forEach((video) => {
-  const title = video.title.toLowerCase();
-
-  Object.keys(keywordMap).forEach((category) => {
-    keywordMap[category].forEach((keyword) => {
-      if (title.includes(keyword.toLowerCase())) {
-        categoryScores[category] += video.score;
-      }
-    });
-  });
-});
-
-// Find dominant trend
-const trendCategories = Object.keys(categoryScores).reduce((a, b) =>
-  categoryScores[a] > categoryScores[b] ? a : b
-);
-
-    // -------------------- TREND DETECTION --------------------
-
-const topTitles = postPerformance.map((video) =>
-  video.title.toLowerCase()
-);
-
-let aiCount = 0;
-let devCount = 0;
-let eduCount = 0;
-
-topTitles.forEach((title) => {
-  if (title.includes("ai") || title.includes("gemini")) aiCount++;
-  if (title.includes("dev") || title.includes("code") || title.includes("implement")) devCount++;
-  if (title.includes("build") || title.includes("tutorial")) eduCount++;
-});
-
-// Determine dominant trend
-let trendCategory = "General Content";
-
-if (aiCount >= devCount && aiCount >= eduCount) {
-  trendCategory = "AI-focused content performs best";
-} else if (devCount >= aiCount && devCount >= eduCount) {
-  trendCategory = "Developer-focused content performs best";
-} else if (eduCount >= aiCount && eduCount >= devCount) {
-  trendCategory = "Educational/tutorial content performs best";
-}
-
-    // WORST VIDEO
-    const worstVideo = postPerformance.reduce((min, video) =>
-      video.score < min.score ? video : min
-    );
-
-    // -------------------- AI INSIGHTS --------------------
-
-    // Upload Insight
-    const maxUploads = Math.max(...uploadFrequency);
-    const bestDayIndex = uploadFrequency.indexOf(maxUploads);
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-    const bestDay = days[bestDayIndex];
-
-    const uploadInsight = `You are most active on ${bestDay}`;
-
-    // Performance Insight
-    let performanceRatio = 0;
-    let performanceInsight = "Not enough data for comparison";
-
-    if (bestVideo && worstVideo && worstVideo.score > 0) {
-      performanceRatio = (bestVideo.score / worstVideo.score).toFixed(1);
-      performanceInsight = `Your best video performs ${performanceRatio}x better than your lowest performing video`;
-    }
-
-    // Consistency Insight
-    const isConsistent = uploadFrequency.every((val) => val >= 3);
-
-    const consistencyInsight = isConsistent
-      ? "You have a consistent upload pattern"
-      : "Your upload pattern is inconsistent across the week";
-
-    // -------------------- SMART RECOMMENDATIONS --------------------
-
-    const bestDayRecommendation = `You should post more on ${bestDay} to maximize engagement`;
-
-    const weekendUploads = uploadFrequency[5] + uploadFrequency[6];
-
-    const weekendRecommendation =
-      weekendUploads < 2
-        ? "Weekend activity is low — consider avoiding or experimenting with weekend posts"
-        : "You are utilizing weekends well";
-
-    const strategyRecommendation =
-      performanceRatio > 5
-        ? "Your top content significantly outperforms others — consider creating similar content"
-        : "Your content performance is balanced — maintain consistency";
-
-    const consistencyRecommendation = isConsistent
-      ? "Keep maintaining your consistent posting schedule"
-      : "Try to maintain a more consistent posting schedule throughout the week";
-    // -------------------- AUTOMATION (PHASE 3 STEP 1) --------------------
-
-// 1. Next Best Day (already calculated earlier)
-const nextBestDay = bestDay;
-
-// 2. Content Suggestion (based on best performing video)
-const contentSuggestion = `${trendCategory}. Consider creating similar themed videos`;
-
-// 3. Posting Advice
-const weekendUploadsAuto = uploadFrequency[5] + uploadFrequency[6];
-
-const postingAdvice =
-  weekendUploadsAuto < 2
-    ? "Avoid weekends and focus on mid-week uploads for better performance"
-    : "You are utilizing weekends well — maintain your current posting pattern";
-// -------------------- ALERT SYSTEM (PHASE 3 STEP 3) --------------------
-
-const alerts = [];
-
-// 1. Consistency Alert
-if (!isConsistent) {
-  alerts.push("⚠ Your upload consistency is low — try posting more regularly");
-}
-
-// 2. High Performance Gap Alert
-if (bestVideo && worstVideo && worstVideo.score > 0) {
-  const ratio = bestVideo.score / worstVideo.score;
-
-  if (ratio > 5) {
-    alerts.push("🔥 Your top video is performing significantly better than others");
-  }
-}
-
-// 3. Low Performing Content Alert
-const lowPerformingVideos = postPerformance.filter(
-  (video) => video.score < 1500
-);
-
-if (lowPerformingVideos.length > 0) {
-  alerts.push("📉 Some of your recent videos are underperforming");
-}
-
-// 4. Strong Performance Alert (optional positive signal)
-if (bestVideo.score > 8000) {
-  alerts.push("🚀 You have a high-performing video — capitalize on this trend");
-}
-    // FINAL RESPONSE
-    res.json({
-      uploadFrequency,
-      postPerformance,
-      bestVideo,
-      worstVideo,
-
-      insights: {
-        uploadInsight,
-        performanceInsight,
-        consistencyInsight,
-      },
-
-      recommendations: {
-        bestDayRecommendation,
-        weekendRecommendation,
-        strategyRecommendation,
-        consistencyRecommendation,
-      },
-        automation: {
-        nextBestDay,
-        contentSuggestion,
-        postingAdvice,
-        trendCategory
-      },
-      alerts,
-      prediction: {
-      predictedViews: predictedNextViews,
-      averageViews: avgViews,
-      performanceLevel
-    },
-    trend: {
-    category: trendCategories,
-    scores: categoryScores
-    },
-    confidence: {
-    level: confidence,
-    deviation: Math.round(stdDeviation)
-    },
-    });
-
+    res.json(buildAnalytics(uploadFrequency, postPerformance));
   } catch (error) {
     console.error(error.response?.data || error.message);
-    res.status(500).json({ error: "Failed to fetch analytics" });
+    res.json(buildAnalytics(fallbackUploadFrequency, fallbackVideos));
   }
 });
-// -------------------- PROFILE API --------------------
-let userProfile = {
-  name: "John Doe",
-  email: "john123@example.com",
-  bio: "Social media enthusiast 🚀"
-};
 
-app.get("/api/profile", (req, res) => {
-  res.json(userProfile);
+app.get("/api/profile", async (req, res) => {
+  try {
+    const email = req.query.email;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const user = isDatabaseReady()
+      ? await User.findOne({ email }).select("-password")
+      : memoryUsers.find((storedUser) => storedUser.email === email);
+
+    if (!user) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    const { password, ...safeUser } = user.toObject ? user.toObject() : user;
+    res.json(safeUser);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
 });
 
-app.put("/api/profile", (req, res) => {
+app.put("/api/profile", async (req, res) => {
   try {
-    const { name, email, bio } = req.body;
-    userProfile = { name, email, bio };
-    res.json(userProfile);
+    const { email, name, bio, avatarUrl } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    if (!isDatabaseReady()) {
+      const user = memoryUsers.find((storedUser) => storedUser.email === email);
+
+      if (!user) {
+        return res.status(404).json({ error: "Profile not found" });
+      }
+
+      user.name = name;
+      user.bio = bio;
+      user.avatarUrl = avatarUrl || "";
+      const { password, ...safeUser } = user;
+      return res.json(safeUser);
+    }
+
+    const updatedUser = await User.findOneAndUpdate(
+      { email },
+      { name, bio, avatarUrl },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: "Profile not found" });
+    }
+
+    res.json(updatedUser);
   } catch (error) {
     res.status(500).json({ error: "Failed to update profile" });
   }
 });
 
-// -------------------- TEST API --------------------
 app.get("/api/test", (req, res) => {
   res.json({ message: "API is working successfully" });
 });
 
-// -------------------- START SERVER --------------------
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

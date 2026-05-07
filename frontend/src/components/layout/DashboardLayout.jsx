@@ -1,48 +1,13 @@
-// import Navbar from "./Navbar";
-// import Sidebar from "./Sidebar";
-
-// export default function DashboardLayout({ children }) {
-//   return (
-//     <div className="flex min-h-screen bg-gray-100">
-
-//       <Navbar />
-
-//       <div className="flex">
-//         <Sidebar />
-
-//         <main className="flex-1 p-6">
-//           {children}
-//         </main>
-
-//       </div>
-//     </div>
-//   );
-// }
-
-
-
-
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 
 export default function DashboardLayout({ children }) {
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-
-      {/* Top Navbar */}
+    <div className="min-h-screen bg-slate-100">
       <Navbar />
-
-      {/* Main Layout */}
-      <div className="flex flex-1">
-
-        {/* Sidebar */}
+      <div className="flex flex-col md:flex-row">
         <Sidebar />
-
-        {/* Content */}
-        <main className="flex-1 p-6">
-          {children}
-        </main>
-
+        <main className="min-w-0 flex-1 p-4 md:p-6">{children}</main>
       </div>
     </div>
   );

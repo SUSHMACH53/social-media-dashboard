@@ -1,12 +1,9 @@
-
-export default function StatsCard({ title, value }) {
+export default function StatsCard({ title, value, helper }) {
   return (
-    <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition duration-300">
-      
-      <h4 className="text-gray-500 text-sm">{title}</h4>
-      
-      <p className="text-2xl font-bold mt-2">{value}</p>
-
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h4 className="text-sm font-medium text-slate-500">{title}</h4>
+      <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+      {helper ? <p className="mt-2 text-xs text-slate-500">{helper}</p> : null}
     </div>
   );
 }
